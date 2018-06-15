@@ -26,17 +26,11 @@
 #include <pangolin/pangolin.h>
 #include <iomanip>
 
-static bool has_suffix(const std::string &str, const std::string &suffix)
-{
-    std::size_t index = str.find(suffix, str.size() - suffix.size());
-    return (index != std::string::npos);
-}
-
 namespace ORB_SLAM2
 {
 
 System::System(const string &strVocFile, const string &strSettingsFile, const eSensor sensor,
-               const bool bUseViewer, bool is_save_map_):mSensor(sensor), is_save_map(is_save_map_), mpViewer(static_cast<Viewer*>(NULL)), mbPause(false), mbReset(false),
+               const bool bUseViewer, const string &strMapFile):mSensor(sensor), mStrMapFile(strMapFile), mbSaveMap(true), mpViewer(static_cast<Viewer*>(NULL)), mbPause(false), mbReset(false),
         mbActivateLocalizationMode(false), mbDeactivateLocalizationMode(false)
 {
     // Output welcome message
@@ -63,18 +57,13 @@ System::System(const string &strVocFile, const string &strSettingsFile, const eS
        exit(-1);
     }
 
-    cv::FileNode mapfilen = fsSettings["Map.mapfile"];
-    bool bReuseMap = false;
-    if (!mapfilen.empty())
-    {
-        mapfile = (string)mapfilen;
-    }
-
     //Load ORB Vocabulary
     cout << endl << "Loading ORB Vocabulary. This could take a while..." << endl;
 
     mpVocabulary = new ORBVocabulary();
     bool bVocLoad = false; // chose loading method based on file extension
+
+    auto has_suffix = [ ] (const std::string &str, const std::string &suffix) { return str.find(suffix, str.size() - suffix.size()) != std::string::npos; };
     if (has_suffix(strVocFile, ".txt"))
         bVocLoad = mpVocabulary->loadFromTextFile(strVocFile);
     else if(has_suffix(strVocFile, ".bin"))
@@ -92,12 +81,13 @@ System::System(const string &strVocFile, const string &strSettingsFile, const eS
 
     //Create KeyFrame Database
     //Create the Map
-    if (!mapfile.empty() && LoadMap(mapfile))
+    bool bReuseMap = false;    
+    if (!mStrMapFile.empty() && LoadMap())
     {
         bReuseMap = true;
     }
     else
-    {
+    {  
         mpKeyFrameDatabase = new KeyFrameDatabase(mpVocabulary);
         mpMap = new Map();
     }
@@ -387,8 +377,8 @@ void System::Shutdown()
     }
     // if(mpViewer)
     //     pangolin::BindToContext("ORB-SLAM2: Map Viewer");
-    if (is_save_map)
-        SaveMap(mapfile);
+    if (mbSaveMap)
+        SaveMap();
 }
 
 void System::SaveTrajectoryTUM(const string &filename)
@@ -448,7 +438,7 @@ void System::SaveTrajectoryTUM(const string &filename)
         f << setprecision(6) << *lT << " " <<  setprecision(9) << twc.at<float>(0) << " " << twc.at<float>(1) << " " << twc.at<float>(2) << " " << q[0] << " " << q[1] << " " << q[2] << " " << q[3] << endl;
     }
     f.close();
-    cout << endl << "trajectory saved!" << endl;
+    cout << endl << "Trajectory saved!" << endl;
 }
 
 
@@ -485,7 +475,7 @@ void System::SaveKeyFrameTrajectoryTUM(const string &filename)
     }
 
     f.close();
-    cout << endl << "trajectory saved!" << endl;
+    cout << endl << "Trajectory saved!" << endl;
 }
 
 void System::SaveTrajectoryKITTI(const string &filename)
@@ -540,7 +530,7 @@ void System::SaveTrajectoryKITTI(const string &filename)
              Rwc.at<float>(2,0) << " " << Rwc.at<float>(2,1)  << " " << Rwc.at<float>(2,2) << " "  << twc.at<float>(2) << endl;
     }
     f.close();
-    cout << endl << "trajectory saved!" << endl;
+    cout << endl << "Trajectory saved!" << endl;
 }
 
 int System::GetTrackingState()
@@ -561,36 +551,37 @@ vector<cv::KeyPoint> System::GetTrackedKeyPointsUn()
     return mTrackedKeyPointsUn;
 }
 
-void System::SaveMap(const string &filename)
+void System::SaveMap()
 {
-    std::ofstream out(filename, std::ios_base::binary);
-    if (!out)
+    ofstream fout(mStrMapFile, ios_base::binary);
+    if (!fout)
     {
-        cerr << "Cannot Write to Mapfile: " << mapfile << std::endl;
+        cerr << "Cannot write map to " << mStrMapFile << endl;
         exit(-1);
     }
-    cout << "Saving Mapfile: " << mapfile << std::flush;
-    boost::archive::binary_oarchive oa(out, boost::archive::no_header);
+    cout << "Saving map to " << mStrMapFile << " ..." << endl << flush;
+    boost::archive::binary_oarchive oa(fout, boost::archive::no_header);
     oa << mpMap;
     oa << mpKeyFrameDatabase;
-    cout << " ...done" << std::endl;
-    out.close();
+    cout << "Map saved!" << endl;
+    fout.close();
 }
-bool System::LoadMap(const string &filename)
+
+bool System::LoadMap()
 {
-    std::ifstream in(filename, std::ios_base::binary);
+    ifstream in(mStrMapFile, ios_base::binary);
     if (!in)
     {
-        cerr << "Cannot Open Mapfile: " << mapfile << " , Create a new one" << std::endl;
+        cerr << "Cannot read map from " << mStrMapFile << ",creating a new one" << endl;
         return false;
     }
-    cout << "Loading Mapfile: " << mapfile << std::flush;
+    cout << "Loading map from " << mStrMapFile << " ..." << endl << flush;
     boost::archive::binary_iarchive ia(in, boost::archive::no_header);
     ia >> mpMap;
     ia >> mpKeyFrameDatabase;
     mpKeyFrameDatabase->SetORBvocabulary(mpVocabulary);
-    cout << " ...done" << std::endl;
-    cout << "Map Reconstructing" << flush;
+    cout << "Map loaded!" << endl;
+    cout << "Reconstructing map ..." << endl << flush;
     vector<ORB_SLAM2::KeyFrame*> vpKFS = mpMap->GetAllKeyFrames();
     unsigned long mnFrameId = 0;
     for (auto it:vpKFS) {
@@ -600,7 +591,7 @@ bool System::LoadMap(const string &filename)
             mnFrameId = it->mnFrameId;
     }
     Frame::nNextId = mnFrameId;
-    cout << " ...done" << endl;
+    cout << "Map reconstructed" << endl;
     in.close();
     return true;
 }
