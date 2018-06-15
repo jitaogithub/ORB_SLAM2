@@ -250,29 +250,21 @@ This mode can be used when you have a good map of your working area. In this mod
 
 You can load ORB vocabulary in either text or binary format. The format is determined by suffix(.txt for text format and .bin for binary format).
 
-`build.sh` will generate a text-to-binary convertor `bin_vocabulary` in `Vocabulary/` . You can also find it as a target in `CMakeLists.txt`.
-
-`bin_vocabulary` will convert `./ORBvoc.txt` to `./ORBvoc.bin` and you can use the new `ORBvoc.bin` as  `PATH_TO_VOCABULARY`  wherever needed.
-
-PS: binary format is loaded faster and text format is more human-readable.
+Binary format is loaded faster and text format is more human-readable.
 
 # 11. Map Save/Load
 
 #### Enable:
 
-Considering this feature doesn't hurt performance, and it is annonying to deal with conditional compilation flags, so this feature will be enabled unconditionally.
+Considering this feature does not hurt performance, and it is annonying to deal with conditional compilation flags, so this feature will be enabled unconditionally.
 
 #### Usage:
 
-This feature is integrated with `class System`. The path of mapfile can be set by adding `Map.mapfile: map.bin` to ORB_SLAM2's settings file. See the last few line of `Example/Monocular/TUM1.xml`.
+This feature is integrated with `class System`. The path of map can be set by adding to the second last argument of the constructor. The last argument of the constructor defines whether to save the map;
 
-To save a map, you need construct `ORB_SLAM2::System` with the last parameter be `true`. Then the `System` will save map to mapfile specified in setting file when `ShutDown`.
+With a readable map file, the map will be loaded automatically and `System` will run in localization mode, but you can change it to SLAM mode later. If the path to map is empty or the map is not readable, `System` will create an empty one.
 
-With a readable mapfile, map will be loaded automatically and `System` will run in localization mode, but you can change it to SLAM mode later.
-
-If you set a mapfile but it doesn't exist, `System` will create new map.
-
-mono_tum has been updated as a simple example of this functionality. An extra command line parameter(0 or 1) should be given to indicate whether you want to save map or not.
+`mono_tum` has been updated as a simple example of this functionality. Two extra command line arguments be given.
 
 #### Implementation related:
 
